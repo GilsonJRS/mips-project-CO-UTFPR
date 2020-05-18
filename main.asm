@@ -6,11 +6,13 @@
 	comma: .asciiz ","
 	lineBreak: .asciiz "\n"
     	.word 0
-    	buffer: .space 1024
+    	buffer_input: .space 1024
     	.word 0
     	buffer_int: .space 1024
     	.word 0
     	buffer_float: .space 1024
+    	.word 0
+    	
 .text
 main:
 	#$s0 = inputFile file descriptor
@@ -61,7 +63,7 @@ mean:
 	#this nested loop get one line and go to
 	#the file, if a x equal the actual x is
 	#find they are added for the mean
-outer_loop:
+mean_outer_loop:
 	#get int(x)
 	add $a0, $s0, $zero
 	jal extract_int
@@ -80,13 +82,13 @@ outer_loop:
 	mtc1 $zero, $f22
 	add.s $f22, $f22, $f20
 	li $s6, 1
-inner_loop:
+mean_inner_loop:
 	add $a0, $s3, $zero
 	jal extract_int
 	add $s3, $s3, $v1
 	add $s5, $v0, $zero #extracted int
 	
-	beq $s3, 0, end_inner_loop #while(!end_of_file)
+	beq $s3, 0, mean_end_inner_loop #while(!end_of_file)
 	
 	add $a0, $s3, $v0
 	jal extract_float
@@ -98,15 +100,15 @@ inner_loop:
 	add.s $f22, $f21, $f20 #if is find, add y to $f22
 	addi $s6, $s6, 1 #and increment the counter
 	x_else:
-	j inner_loop
-end_inner_loop:
+	j mean_inner_loop
+mean_end_inner_loop:
 	bgt $s6, 1, div_else
 	mtc1 $s6, $f23
 	div.s $f22, $f22, $f23 
 	div_else:
 	#print x($s4) and y($f22)
-	j outer_loop
-end_outer_loop:
+	j mean_outer_loop
+mean_end_outer_loop:
 	lw $s0, 0($sp)
 	lw $s1, 4($sp)
 	lw $ra, 8($sp)
@@ -124,7 +126,7 @@ extract_int:
 	
 	li $v0, 14
     	add $a0, $s0, $zero
-    	la $a1, buffer
+    	la $a1, buffer_input
     	li $a2, 1
     	syscall	
 
@@ -148,22 +150,49 @@ extract_float:
 print_on_file:
 
 #----------------------------------------------
-#atoi function
+#string_to_int function
 #$a0 = address of string
 #$v0 = integer 
 #----------------------------------------------
-atoi:
-	add $sp, $sp, -4
-	sw $ra, 0($sp)
-	#string address
+string_to_int:
 	move $t0, $a0
+	li $v0, 0 #initializing number with 0
+	li $t1, 0 #flag to negative numbers
 	
-	li $v0, 0
-loop_1:
-	lb $t1, 0($t0)
-	
-end_loop_1:
+	#load the first byte, if is a 
+	#- sign changes the flag to 1 and
+	#go to the next char
+	lb $t2, ($t0) 
+	bne $t2, 45, string2int_loop
+	li $t1, 1
+	add $t0, $t0, 1
 
+	string2int_loop:
+	lb $t2, ($t0)
+	#verificating if the caracter
+	#is in the range of ascii number
+	#representation (0(4) to 9(57))
+	blt $t2, 48, string2int_end_loop
+	bgt $t2, 57, string2int_end_loop
+
+	mul $v0, $v0, 10 
+	add $v0, $v0, $t2
+	sub $v0, $v0, 48 #remove 48 for convert to int
+	
+	add $t0, $t0, 1
+	
+	j string2int_loop
+string2int_end_loop:
+	bne $t1, 1, negative_flag_else
+	sub $v0, $zero, $v0
+	negative_flag_else:
+	jr $ra
+#----------------------------------------------
+#string_to_int function
+#$a0 = address of string
+#$f0 = float 
+#----------------------------------------------
+string_to_float:
 
 #----------------------------------------------
 #error's labels
