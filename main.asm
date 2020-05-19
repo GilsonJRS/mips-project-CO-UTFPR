@@ -155,6 +155,9 @@ print_on_file:
 #$v0 = integer 
 #----------------------------------------------
 string_to_int:
+	add $sp, $sp, -4
+	sw $ra, 0($sp)
+	
 	move $t0, $a0
 	li $v0, 0 #initializing number with 0
 	li $t1, 0 #flag to negative numbers
@@ -172,8 +175,8 @@ string_to_int:
 	#verificating if the caracter
 	#is in the range of ascii number
 	#representation (0(4) to 9(57))
-	blt $t2, 48, string2int_end_loop
-	bgt $t2, 57, string2int_end_loop
+	blt $t2, 48, string2int_end_loop #throw exception?
+	bgt $t2, 57, string2int_end_loop #throw exception?
 
 	mul $v0, $v0, 10 
 	add $v0, $v0, $t2
@@ -186,6 +189,9 @@ string2int_end_loop:
 	bne $t1, 1, negative_flag_else
 	sub $v0, $zero, $v0
 	negative_flag_else:
+	
+	lw $ra, 0($sp)
+	add $sp, $sp, 4
 	jr $ra
 #----------------------------------------------
 #string_to_int function
@@ -193,7 +199,72 @@ string2int_end_loop:
 #$f0 = float 
 #----------------------------------------------
 string_to_float:
+	add $sp, $sp, -4
+	sw $ra, 0($sp)
+	
+	la $t0, num
+	mtc1 $zero, $f0 #initializing number with 0
+	li $t1, 0 #flag to negative numbers
+	
+	li $t3, 10
+	mtc1 $t3, $f5 #for decimal part conversion
+	cvt.s.w $f5, $f5
+	mtc1 $t3, $f8
+	cvt.s.w $f8, $f8
+	
+	#load the first byte, if is a 
+	#- sign changes the flag to 1 and
+	#go to the next char
+	lb $t2, ($t0) 
+	bne $t2, 45, string2int_loop
+	li $t1, 1
+	add $t0, $t0, 1
 
+	string2int_loop:
+	lb $t2, ($t0)
+	#verificating if the caracter
+	#is in the range of ascii number
+	#representation (0(4) to 9(57))
+	beq $t2, 46, float_dot
+	blt $t2, 48, string2int_end_loop #throw exception
+	bgt $t2, 57, string2int_end_loop #throw exception
+
+	mul $v0, $v0, 10 
+	add $v0, $v0, $t2
+	sub $v0, $v0, 48 #remove 48 for convert to int
+	
+	mtc1 $v0, $f0 #move interger number to the FP register
+	cvt.s.w $f0, $f0 #converting to float
+	add $t0, $t0, 1
+	j string2int_loop
+float_dot:
+	add $t0, $t0, 1
+	lb $t2, ($t0)
+	blt $t2, 48, string2int_end_loop
+	bgt $t2, 57, string2int_end_loop
+	
+	sub $t2, $t2, 48
+	#move to float register
+	mtc1 $t2, $f6
+	cvt.s.w $f6, $f6
+	
+	div.s $f7, $f6, $f5
+	add.s $f0, $f0, $f7
+	
+	mul.s $f5, $f5, $f8
+	j float_dot
+string2int_end_loop:
+	bne $t1, 1, negative_flag_else
+	mtc1 $zero, $f4
+	sub.s $f0, $f4, $f0
+	negative_flag_else:
+	mov.s $f12, $f0
+	li $v0, 2
+	syscall
+	
+	lw $ra, 0($sp)
+	add $sp, $sp, 4
+	jr $ra
 #----------------------------------------------
 #error's labels
 #----------------------------------------------
