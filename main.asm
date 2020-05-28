@@ -8,7 +8,7 @@
     	.word 0
     	buffer_input: .space 1024
     	.word 0
-    	buffer_int: .space 1024
+    	buffer_int: .byte 20
     	.word 0
     	buffer_float: .space 1024
     	.word 0
@@ -37,6 +37,13 @@ main:
     	syscall    	
     	add $s1, $v0, $zero
     	bltz $s1, outputFile_error
+    	
+    	#move $a0, $s0
+    	#move $a1, $s1
+    	#jal mean
+    	
+    	move $a0, $s0
+    	jal extract_int
     	
  	#close files
 	li $v0, 16
@@ -118,21 +125,58 @@ mean_end_outer_loop:
 #extract int
 #$a0 = input file
 #$v0 = int extracted
-#$v1 = number of chars readed
+#$v1 = new  position of file descriptor
 #----------------------------------------------
 extract_int:	
-	add $sp, $sp, -4
+	add $sp, $sp, -8
+	sw $s0, 4($sp)
 	sw $ra, 0($sp)
 	
+	move $s0, $a0 #file descriptor
+	la $t0, buffer_input
+	li $v1, 15
+	la $t3, buffer_int
+	#read 11 bytes(2147483647 or -2147483648) 
 	li $v0, 14
     	add $a0, $s0, $zero
-    	la $a1, buffer_input
-    	li $a2, 1
-    	syscall	
-
-	lw $ra, 0($sp)
-	add $sp, $sp, 4
+	la $a1, buffer_input
+	li $a2, 15
+	syscall
+    	
+	lb $t2, ($t0)
+    	#*to do: remove spaces	
+	#get negative signal
+	bne $t2, 45, string_int_copy
+	sb $t2, ($t3)
+	add $t3, $t3, 1
+	add $t0, $t0, 1
+	add $v1, $v1, -1
+string_int_copy:
+	lb $t2, ($t0)
+	blt $t2, 48, end_string_int_copy #0-9 range
+	bgt $t2, 57, end_string_int_copy #0-9 range    	
+	sb $t2, ($t3)
+	add $t3, $t3, 1
+	add $t0, $t0, 1
+	add $v1, $v1, -1
+	j string_int_copy
+end_string_int_copy:
+	lb $t2, ($t0)
+	beq $t2, 45, end_string_int_file_descriptor
+	bge $t2, 47, end_string_int_file_descriptor
+	ble $t2, 58, end_string_int_file_descriptor
+	add $t0, $t0, 1	
+	add $v1, $v1, -1
+	j end_string_int_copy
+end_string_int_file_descriptor_adjustment:	
+	la $a0, buffer_int
+	jal string_to_int
+	move $v0, $v0 #return int
+	sub $v1, $s0, $v1
 	
+	lw $ra, 0($sp)
+	lw $s0, 4($sp)
+	add $sp, $sp, 8
 #----------------------------------------------
 #extract float
 #$a0
@@ -194,7 +238,7 @@ string2int_end_loop:
 	add $sp, $sp, 4
 	jr $ra
 #----------------------------------------------
-#string_to_int function
+#string_to_float function
 #$a0 = address of string
 #$f0 = float 
 #----------------------------------------------
@@ -202,7 +246,7 @@ string_to_float:
 	add $sp, $sp, -4
 	sw $ra, 0($sp)
 	
-	la $t0, num
+	move $t0, $a0
 	mtc1 $zero, $f0 #initializing number with 0
 	li $t1, 0 #flag to negative numbers
 	
@@ -216,18 +260,18 @@ string_to_float:
 	#- sign changes the flag to 1 and
 	#go to the next char
 	lb $t2, ($t0) 
-	bne $t2, 45, string2int_loop
+	bne $t2, 45, string_to_float_str2int_loop
 	li $t1, 1
 	add $t0, $t0, 1
 
-	string2int_loop:
+	string_to_float_str2int_loop:
 	lb $t2, ($t0)
 	#verificating if the caracter
 	#is in the range of ascii number
 	#representation (0(4) to 9(57))
 	beq $t2, 46, float_dot
-	blt $t2, 48, string2int_end_loop #throw exception
-	bgt $t2, 57, string2int_end_loop #throw exception
+	blt $t2, 48, string_to_float_str2int_end_loop #throw exception
+	bgt $t2, 57, string_to_float_str2int_end_loop #throw exception
 
 	mul $v0, $v0, 10 
 	add $v0, $v0, $t2
@@ -236,12 +280,12 @@ string_to_float:
 	mtc1 $v0, $f0 #move interger number to the FP register
 	cvt.s.w $f0, $f0 #converting to float
 	add $t0, $t0, 1
-	j string2int_loop
+	j string_to_float_str2int_loop
 float_dot:
 	add $t0, $t0, 1
 	lb $t2, ($t0)
-	blt $t2, 48, string2int_end_loop
-	bgt $t2, 57, string2int_end_loop
+	blt $t2, 48, string_to_float_str2int_end_loop
+	bgt $t2, 57, string_to_float_str2int_end_loop
 	
 	sub $t2, $t2, 48
 	#move to float register
@@ -253,14 +297,12 @@ float_dot:
 	
 	mul.s $f5, $f5, $f8
 	j float_dot
-string2int_end_loop:
-	bne $t1, 1, negative_flag_else
+string_to_float_str2int_end_loop:
+	#if negative flat true invert signal
+	bne $t1, 1, str2float_negative_flag_else
 	mtc1 $zero, $f4
 	sub.s $f0, $f4, $f0
-	negative_flag_else:
-	mov.s $f12, $f0
-	li $v0, 2
-	syscall
+	str2float_negative_flag_else:
 	
 	lw $ra, 0($sp)
 	add $sp, $sp, 4
