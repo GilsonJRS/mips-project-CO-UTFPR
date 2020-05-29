@@ -3,14 +3,15 @@
 	outputFile: .asciiz "/home/gilson/Documents/Computer Organization/mips-project-CO-UTFPR/outputFiles/test.csv"
 	inputFile_error_msg: .asciiz "error on open input file"
 	outputFile_error_msg: .asciiz "error on create output file"
+	invalid_x_input: .asciiz "invalid x value"
 	comma: .asciiz ","
 	lineBreak: .asciiz "\n"
     	.word 0
-    	buffer_input: .space 1024
+    	buffer_input: .byte 1
     	.word 0
-    	buffer_int: .byte 20
+    	buffer_int: .byte 100
     	.word 0
-    	buffer_float: .space 1024
+    	buffer_float: .byte 100
     	.word 0
     	
 .text
@@ -44,6 +45,18 @@ main:
     	
     	move $a0, $s0
     	jal extract_int
+    	
+    	move $a0, $v0
+    	li $v0, 1
+    	syscall
+    	
+    	
+    	move $a0, $s0
+    	jal extract_int
+    	
+    	move $a0, $v0
+    	li $v0, 1
+    	syscall
     	
  	#close files
 	li $v0, 16
@@ -125,7 +138,6 @@ mean_end_outer_loop:
 #extract int
 #$a0 = input file
 #$v0 = int extracted
-#$v1 = new  position of file descriptor
 #----------------------------------------------
 extract_int:	
 	add $sp, $sp, -8
@@ -133,50 +145,56 @@ extract_int:
 	sw $ra, 0($sp)
 	
 	move $s0, $a0 #file descriptor
+	
 	la $t0, buffer_input
-	li $v1, 15
 	la $t3, buffer_int
+	#*to do: remove spaces	
 	#read 11 bytes(2147483647 or -2147483648) 
 	li $v0, 14
     	add $a0, $s0, $zero
 	la $a1, buffer_input
-	li $a2, 15
+	li $a2, 1
 	syscall
     	
 	lb $t2, ($t0)
-    	#*to do: remove spaces	
 	#get negative signal
 	bne $t2, 45, string_int_copy
 	sb $t2, ($t3)
 	add $t3, $t3, 1
-	add $t0, $t0, 1
-	add $v1, $v1, -1
 string_int_copy:
 	lb $t2, ($t0)
 	blt $t2, 48, end_string_int_copy #0-9 range
 	bgt $t2, 57, end_string_int_copy #0-9 range    	
 	sb $t2, ($t3)
 	add $t3, $t3, 1
-	add $t0, $t0, 1
-	add $v1, $v1, -1
+	
+	li $v0, 14
+    	add $a0, $s0, $zero
+	la $a1, buffer_input
+	li $a2, 1
+	syscall
+
 	j string_int_copy
 end_string_int_copy:
 	lb $t2, ($t0)
-	beq $t2, 45, end_string_int_file_descriptor
-	bge $t2, 47, end_string_int_file_descriptor
-	ble $t2, 58, end_string_int_file_descriptor
-	add $t0, $t0, 1	
-	add $v1, $v1, -1
+	beq $t2, 44, end_string_int_file_descriptor_adjustment
+	
+	li $v0, 14
+    	add $a0, $s0, $zero
+	la $a1, buffer_input
+	li $a2, 1
+	syscall
+	
 	j end_string_int_copy
 end_string_int_file_descriptor_adjustment:	
 	la $a0, buffer_int
 	jal string_to_int
 	move $v0, $v0 #return int
-	sub $v1, $s0, $v1
 	
 	lw $ra, 0($sp)
 	lw $s0, 4($sp)
 	add $sp, $sp, 8
+	jr $ra
 #----------------------------------------------
 #extract float
 #$a0
@@ -184,7 +202,7 @@ end_string_int_file_descriptor_adjustment:
 #$v1
 #----------------------------------------------
 extract_float:
-
+	
 #----------------------------------------------
 #print on output file
 #$a0
