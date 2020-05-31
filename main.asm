@@ -1,3 +1,4 @@
+.eqv buffer_input_length 1024
 .data 
 	inputFile: .asciiz "/home/gilson/Documents/Computer Organization/mips-project-CO-UTFPR/inputFiles/test.csv" 
 	outputFile: .asciiz "/home/gilson/Documents/Computer Organization/mips-project-CO-UTFPR/outputFiles/test.csv"
@@ -6,13 +7,16 @@
 	invalid_x_input: .asciiz "invalid x value"
 	comma: .asciiz ","
 	lineBreak: .asciiz "\n"
+	null: .asciiz ""
     	.word 0
-    	buffer_input: .byte 1
+    	buffer_input: .space 1024
     	.word 0
     	buffer_int: .byte 100
     	.word 0
     	buffer_float: .byte 100
     	.word 0
+    	inputFilePointer: .space 4
+    	
     	
 .text
 main:
@@ -21,7 +25,6 @@ main:
 	#
 	#
 	#
-	
    	#open inputFile
     	li $v0, 13
     	la $a0, inputFile
@@ -42,22 +45,6 @@ main:
     	#move $a0, $s0
     	#move $a1, $s1
     	#jal mean
-    	
-    	move $a0, $s0
-    	jal extract_int
-    	
-    	move $a0, $v0
-    	li $v0, 1
-    	syscall
-    	
-    	
-    	move $a0, $s0
-    	jal extract_int
-    	
-    	move $a0, $v0
-    	li $v0, 1
-    	syscall
-    	
  	#close files
 	li $v0, 16
     	add $a0, $s0, $zero
@@ -148,8 +135,7 @@ extract_int:
 	
 	la $t0, buffer_input
 	la $t3, buffer_int
-	#*to do: remove spaces	
-	#read 11 bytes(2147483647 or -2147483648) 
+	#*to do: remove spaces
 	li $v0, 14
     	add $a0, $s0, $zero
 	la $a1, buffer_input
@@ -157,23 +143,23 @@ extract_int:
 	syscall
     	
 	lb $t2, ($t0)
-	#get negative signal
+    	#get negative signal
 	bne $t2, 45, string_int_copy
 	sb $t2, ($t3)
 	add $t3, $t3, 1
+	j string_int_copy_continue
 string_int_copy:
 	lb $t2, ($t0)
 	blt $t2, 48, end_string_int_copy #0-9 range
 	bgt $t2, 57, end_string_int_copy #0-9 range    	
 	sb $t2, ($t3)
 	add $t3, $t3, 1
-	
+string_int_copy_continue:
 	li $v0, 14
     	add $a0, $s0, $zero
 	la $a1, buffer_input
 	li $a2, 1
 	syscall
-
 	j string_int_copy
 end_string_int_copy:
 	lb $t2, ($t0)
@@ -186,7 +172,10 @@ end_string_int_copy:
 	syscall
 	
 	j end_string_int_copy
-end_string_int_file_descriptor_adjustment:	
+end_string_int_file_descriptor_adjustment:
+	lb $t2, null #load null terminator
+	sb $t2, ($t3) #stores null to flag buffer_int end
+	
 	la $a0, buffer_int
 	jal string_to_int
 	move $v0, $v0 #return int
@@ -197,12 +186,68 @@ end_string_int_file_descriptor_adjustment:
 	jr $ra
 #----------------------------------------------
 #extract float
-#$a0
-#$v0
-#$v1
+#$a0 = input file
+#$f0 = return float
 #----------------------------------------------
 extract_float:
+	add $sp, $sp, -8
+	sw $s0, 4($sp)
+	sw $ra, 0($sp)
 	
+	move $s0, $a0 #file descriptor
+	
+	la $t0, buffer_input
+	la $t3, buffer_float
+	#*to do: remove spaces
+	li $v0, 14
+	add $a0, $s0, $zero
+	la $a1, buffer_input
+	li $a2, 1
+	syscall
+	
+	lb $t2, ($t0)
+	bne $t2, 45, string_float_copy
+	sb $t2, ($t3)
+	j string_float_continue
+string_float_copy:
+	lb $t2, ($t0)
+	beq $t2, 46, string_float_continue
+	blt $t2, 48, end_string_float_copy
+	bgt $t2, 57, end_string_float_copy
+string_float_continue:
+	sb $t2, ($t3)
+	add $t3, $t3, 1
+	
+	li $v0, 14
+	add $a0, $s0, $zero
+	la $a1, buffer_input
+	li $a2, 1
+	syscall
+	
+	j string_float_copy
+end_string_float_copy:
+	lb $t2, ($t0)
+	beq $t2, 10, end_string_float_file_descriptor_adjustment
+	
+	li $v0, 14
+	add $a0, $s0, $zero
+	la $a1, buffer_input
+	li $a2, 1
+	syscall
+	
+	j end_string_float_copy
+end_string_float_file_descriptor_adjustment:
+	lb $t2, null
+	sb $t2, ($t3)
+	
+	la $a0, buffer_float
+	jal string_to_float
+	mov.s $f0, $f0
+	
+	lw $ra, 0($sp)
+	lw $s0, 4($sp)
+	add $sp, $sp, 8
+	jr $ra
 #----------------------------------------------
 #print on output file
 #$a0
@@ -264,6 +309,7 @@ string_to_float:
 	add $sp, $sp, -4
 	sw $ra, 0($sp)
 	
+	add $v0, $zero, $zero #resetting for later use
 	move $t0, $a0
 	mtc1 $zero, $f0 #initializing number with 0
 	li $t1, 0 #flag to negative numbers
@@ -323,6 +369,36 @@ string_to_float_str2int_end_loop:
 	str2float_negative_flag_else:
 	
 	lw $ra, 0($sp)
+	add $sp, $sp, 4
+	jr $ra
+#----------------------------------------------
+#set the file descriptor to a new position
+#$a0 = file descriptor
+#$a1 = number of bytes to offset 
+#----------------------------------------------
+fseek:
+	add $sp, $sp, -4
+	sw $s0, ($sp)
+	
+	move $s0, $a0
+	
+	ble $a1, buffer_input_length, end_fseek_greater_loop
+fseek_greater_loop:
+	sub $a1, $a1, buffer_input_length
+	li $v0, 14
+    	move $a0, $s0
+	la $a1, buffer_input
+	li $a2, buffer_input_length
+	syscall
+	bgt $a1, buffer_input_length, fseek_greater_loop
+end_fseek_greater_loop:
+	li $v0, 14
+    	move $a0, $s0
+	la $a1, buffer_input
+	move $a2, $a1
+	syscall
+	
+	lw $s0, 0($sp)
 	add $sp, $sp, 4
 	jr $ra
 #----------------------------------------------
