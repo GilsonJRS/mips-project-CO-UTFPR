@@ -16,8 +16,6 @@
     	buffer_float: .byte 100
     	.word 0
     	inputFilePointer: .space 4
-    	
-    	
 .text
 main:
 	#$s0 = inputFile file descriptor
@@ -25,14 +23,7 @@ main:
 	#
 	#
 	#
-   	#open inputFile
-    	li $v0, 13
-    	la $a0, inputFile
-    	add $a1, $zero, $zero	#$a1 = 0(read)
-    	add $a2, $zero, $zero
-    	syscall
-    	add $s0, $v0, $zero
-    	bltz $s0, inputFile_error
+ 
     	#open outputFile
     	li $v0, 13
     	la $a0 outputFile
@@ -41,15 +32,12 @@ main:
     	syscall    	
     	add $s1, $v0, $zero
     	bltz $s1, outputFile_error
-    	
     	#move $a0, $s0
-    	#move $a1, $s1
-    	#jal mean
+    	move $a1, $s1
+    	jal mean
  	#close files
 	li $v0, 16
-    	add $a0, $s0, $zero
-    	syscall
-    	add $a0, $s1, $zero
+       	add $a0, $s1, $zero
     	syscall
 	j exit
 
@@ -64,44 +52,58 @@ mean:
 	sw $s1, 4($sp)
 	sw $s0, 0($sp)
 	
-	add $s0, $a0, $zero #$s0 = input file
+	li $t0, 0
+	sw $t0, inputFilePointer
+	
 	add $s1, $a1, $zero #$s1 = output file
 	
 	#this nested loop get one line and go to
 	#the file, if a x equal the actual x is
 	#find they are added for the mean
 mean_outer_loop:
+	#open inputFile
+    	li $v0, 13
+    	la $a0, inputFile
+    	add $a1, $zero, $zero	#$a1 = 0(read)
+    	add $a2, $zero, $zero
+    	syscall
+    	add $s0, $v0, $zero
+    	bltz $s0, inputFile_error
+    	
+    	#adjust file pointer
+	move $a0, $s0
+	lw $a1, inputFilePointer
+	jal fseek
+	beqz $v0, mean_end_outer_loop
+	
 	#get int(x)
-	add $a0, $s0, $zero
+	move $a0, $s0
 	jal extract_int
-	add $s0, $s0, $v1
+	sw $v1, inputFilePointer
 	add $s4, $v0, $zero #extracted int
 	
-	#get flot(y)
-	add $a0, $s0, $v0
+	#get float(y)
+	move $a0, $s0
 	jal extract_float
-	add $s0, $s0, $v1
+	sw $v1, inputFilePointer
 	mtc1 $zero, $f20 #set $f20 to zero
 	add.s $f20, $f20, $f0 #extracted float
-	
-	add $s3, $s0, $zero #$s3 = copy of $s1 int actual line
+	beq $a0, 1, mean_end_inner_loop
 
 	mtc1 $zero, $f22
 	add.s $f22, $f22, $f20
 	li $s6, 1
 mean_inner_loop:
-	add $a0, $s3, $zero
+	move $a0, $s0
 	jal extract_int
-	add $s3, $s3, $v1
 	add $s5, $v0, $zero #extracted int
+	beqz $a0, div_else
 	
-	beq $s3, 0, mean_end_inner_loop #while(!end_of_file)
-	
-	add $a0, $s3, $v0
+	move $a0, $s0
 	jal extract_float
-	add $s3, $s3, $v1
 	mtc1 $zero, $f21
 	add.s $f21, $f21, $f0 #extracted float
+	beq $a0, 1, mean_end_inner_loop
 	
 	bne $s4, $s5, x_else #verify if another x equal the actual x is find
 	add.s $f22, $f21, $f20 #if is find, add y to $f22
@@ -109,13 +111,18 @@ mean_inner_loop:
 	x_else:
 	j mean_inner_loop
 mean_end_inner_loop:
-	bgt $s6, 1, div_else
+	beq $s6, 1, div_else
 	mtc1 $s6, $f23
 	div.s $f22, $f22, $f23 
 	div_else:
 	#print x($s4) and y($f22)
+	#close file
+	li $v0, 16
+    	add $a0, $s0, $zero
+    	syscall
 	j mean_outer_loop
 mean_end_outer_loop:
+
 	lw $s0, 0($sp)
 	lw $s1, 4($sp)
 	lw $ra, 8($sp)
@@ -125,6 +132,7 @@ mean_end_outer_loop:
 #extract int
 #$a0 = input file
 #$v0 = int extracted
+#$v1 = new position of file descritor
 #----------------------------------------------
 extract_int:	
 	add $sp, $sp, -8
@@ -133,14 +141,19 @@ extract_int:
 	
 	move $s0, $a0 #file descriptor
 	
+	li $v1, 0
 	la $t0, buffer_input
 	la $t3, buffer_int
+	lw $t4, inputFilePointer
+	
 	#*to do: remove spaces
 	li $v0, 14
     	add $a0, $s0, $zero
 	la $a1, buffer_input
 	li $a2, 1
 	syscall
+	addu $t4, $t4, 1
+	beqz $v0, extract_int_end_of_file_flag
     	
 	lb $t2, ($t0)
     	#get negative signal
@@ -160,9 +173,12 @@ string_int_copy_continue:
 	la $a1, buffer_input
 	li $a2, 1
 	syscall
+	addu $t4, $t4, 1
+		
 	j string_int_copy
 end_string_int_copy:
 	lb $t2, ($t0)
+	beq $t2, 10, end_string_int_file_descriptor_adjustment
 	beq $t2, 44, end_string_int_file_descriptor_adjustment
 	
 	li $v0, 14
@@ -170,7 +186,7 @@ end_string_int_copy:
 	la $a1, buffer_input
 	li $a2, 1
 	syscall
-	
+	addu $t4, $t4, 1
 	j end_string_int_copy
 end_string_int_file_descriptor_adjustment:
 	lb $t2, null #load null terminator
@@ -180,6 +196,11 @@ end_string_int_file_descriptor_adjustment:
 	jal string_to_int
 	move $v0, $v0 #return int
 	
+	move $v1, $t4
+	j extract_int_exit
+extract_int_end_of_file_flag:
+	li $a0, 0
+extract_int_exit:
 	lw $ra, 0($sp)
 	lw $s0, 4($sp)
 	add $sp, $sp, 8
@@ -188,6 +209,7 @@ end_string_int_file_descriptor_adjustment:
 #extract float
 #$a0 = input file
 #$f0 = return float
+#$v1 = end of file flag
 #----------------------------------------------
 extract_float:
 	add $sp, $sp, -8
@@ -198,12 +220,14 @@ extract_float:
 	
 	la $t0, buffer_input
 	la $t3, buffer_float
+	lw $t4, inputFilePointer
 	#*to do: remove spaces
 	li $v0, 14
 	add $a0, $s0, $zero
 	la $a1, buffer_input
 	li $a2, 1
 	syscall
+	add $t4, $t4, 1
 	
 	lb $t2, ($t0)
 	bne $t2, 45, string_float_copy
@@ -223,6 +247,8 @@ string_float_continue:
 	la $a1, buffer_input
 	li $a2, 1
 	syscall
+	add $t4, $t4, 1
+	beqz $v0, end_string_float_file_descriptor_adjustment_flag_end
 	
 	j string_float_copy
 end_string_float_copy:
@@ -234,8 +260,11 @@ end_string_float_copy:
 	la $a1, buffer_input
 	li $a2, 1
 	syscall
-	
-	j end_string_float_copy
+	add $t4, $t4, 1
+
+	j end_string_float_copy	
+end_string_float_file_descriptor_adjustment_flag_end:
+	li $s0, 1
 end_string_float_file_descriptor_adjustment:
 	lb $t2, null
 	sb $t2, ($t3)
@@ -244,6 +273,9 @@ end_string_float_file_descriptor_adjustment:
 	jal string_to_float
 	mov.s $f0, $f0
 	
+	move $v1, $t4
+	seq $a0, $s0, 1
+end_string_float_file_exit:	
 	lw $ra, 0($sp)
 	lw $s0, 4($sp)
 	add $sp, $sp, 8
@@ -375,13 +407,14 @@ string_to_float_str2int_end_loop:
 #set the file descriptor to a new position
 #$a0 = file descriptor
 #$a1 = number of bytes to offset 
+#$v0 = end of file flag
 #----------------------------------------------
 fseek:
 	add $sp, $sp, -4
-	sw $s0, ($sp)
+	sw $s0, 0($sp)
 	
 	move $s0, $a0
-	
+	beqz $a1, end_fseek
 	ble $a1, buffer_input_length, end_fseek_greater_loop
 fseek_greater_loop:
 	sub $a1, $a1, buffer_input_length
@@ -390,6 +423,8 @@ fseek_greater_loop:
 	la $a1, buffer_input
 	li $a2, buffer_input_length
 	syscall
+	beqz $v0, end_fseek
+	
 	bgt $a1, buffer_input_length, fseek_greater_loop
 end_fseek_greater_loop:
 	li $v0, 14
@@ -397,7 +432,7 @@ end_fseek_greater_loop:
 	la $a1, buffer_input
 	move $a2, $a1
 	syscall
-	
+end_fseek:
 	lw $s0, 0($sp)
 	add $sp, $sp, 4
 	jr $ra
