@@ -1,6 +1,6 @@
 .eqv buffer_input_length 1024
 .data 
-	inputFile: .asciiz "/home/gilson/Documents/Computer Organization/mips-project-CO-UTFPR/inputFiles/test.csv" 
+	inputFile: .asciiz "/home/gilson/Documents/mips-project-CO-UTFPR/inputFiles/teste.csv" 
 	outputFile: .asciiz "/home/gilson/Documents/Computer Organization/mips-project-CO-UTFPR/outputFiles/test.csv"
 	inputFile_error_msg: .asciiz "error on open input file"
 	outputFile_error_msg: .asciiz "error on create output file"
@@ -11,13 +11,14 @@
     	.word 0
     	buffer_input: .space 1024
     	.word 0
-    	buffer_int: .byte 100
+    	buffer_int: .space 100
     	.word 0
-    	buffer_float: .byte 100
+    	buffer_float: .space 100
     	.word 0
     	inputFilePointer: .space 4
     	.word 0
     	alreadyRead: .space 500000
+    
 .text
 main:
     	jal mean
@@ -27,14 +28,18 @@ main:
 #$a1 = output file
 #----------------------------------------------
 mean:
-	add $sp, $sp, -12
-	sw $ra, 8($sp)
+	add $sp, $sp, -32
+	sw $ra, 28($sp)
+	swc1 $f21, 24($sp)
+	swc1 $f20, 20($sp)
+	sw $s5, 16($sp)
+	sw $s6, 12($sp)
+	sw $s2, 8($sp)
 	sw $s1, 4($sp)
 	sw $s0, 0($sp)
 	
-	li $t0, 0
-	sw $t0, inputFilePointer #set position on file = 0
-	
+	sw $zero, inputFilePointer #set position on file = 0
+	la $s7, alreadyRead 
 	#add $s1, $a1, $zero #$s1 = output file
 	
 	#this nested loop get one line and go to
@@ -42,6 +47,7 @@ mean:
 	#find they are added for the mean
 mean_outer_loop:
 	#open inputFile
+	#input file descritor = $s0
     	li $v0, 13
     	la $a0, inputFile
     	add $a1, $zero, $zero	#$a1 = 0(read)
@@ -49,63 +55,109 @@ mean_outer_loop:
     	syscall
     	add $s0, $v0, $zero
     	bltz $s0, inputFile_error
-    	
+		
     	#adjust file pointer
 	move $a0, $s0
 	lw $a1, inputFilePointer
 	jal fseek
 	beqz $v0, mean_end_outer_loop
-	
-	#get int(x)
+re_read:	
+	#get int(x) and save in $s2
 	move $a0, $s0
 	li $a1, 1 #update inputFilePointer
 	jal extract_int
-	add $s4, $v0, $zero #extracted int
+	add $s2, $v0, $zero #extracted int
+	beq $v1, 1, mean_end_outer_loop
+	
+	#li $v0,1
+	#move $a0, $s2
+	#syscall
 	
 	#get float(y)
 	move $a0, $s0
-	li $a1, 1
+	li $a1, 1 #update inputFilePointer
 	jal extract_float
 	mtc1 $zero, $f20 #set $f20 to zero
 	add.s $f20, $f20, $f0 #extracted float
-
+	
+	#li $v0, 2
+	#mov.s $f12, $f20
+	#syscall
+	
+	move $a0, $s2
+	move $a1, $s7
+	la $a3, alreadyRead
+	jal addAlready
+	move $s7, $v0
+	beq $v1, 1, re_read
+	
+	#$f22 have the sum of floats
 	mtc1 $zero, $f22
-	add.s $f22, $f22, $f20
+	add.s $f22, $f22, $f20 
+	
+	#mean counter
 	li $s6, 1
+	
+	
 mean_inner_loop:
 	move $a0, $s0
+	li $a1, 0
 	jal extract_int
-	add $s5, $v0, $zero #extracted int
-	beqz $a0, div_else
+	add $s5, $v0, $zero #extracted int = $s5
+	
+	#li $v0,1
+	#move $a0, $v1
+	#syscall
+	
+	beq $v1, 1, mean_end_inner_loop
 	
 	move $a0, $s0
+	li $a1, 0
 	jal extract_float
 	mtc1 $zero, $f21
-	add.s $f21, $f21, $f0 #extracted float
-	beq $a0, 1, mean_end_inner_loop
+	add.s $f21, $f21, $f0 #extracted float on $f21
+	#beq $v1, 1, mean_end_inner_loop
 	
-	bne $s4, $s5, x_else #verify if another x equal the actual x is find
-	add.s $f22, $f21, $f20 #if is find, add y to $f22
+	#li $v0, 2
+	#mov.s $f12, $f21
+	#syscall
+	
+	bne $s2, $s5, x_else #verify if another x equal the actual x is find
+	add.s $f22, $f22, $f21 #if is find, add y to $f22
 	addi $s6, $s6, 1 #and increment the counter
 	x_else:
 	j mean_inner_loop
 mean_end_inner_loop:
 	beq $s6, 1, div_else
-	mtc1 $s6, $f23
-	div.s $f22, $f22, $f23 
+	mtc1 $s6, $f23 #move couter to coproc
+	cvt.s.w $f23, $f23 #convert from word to float
+	div.s $f22, $f22, $f23 #MEAN
 	div_else:
 	#print x($s4) and y($f22)
 	#close file
+	li $v0,2
+	mov.s $f12, $f22
+	syscall
+	
+	li $v0, 4
+	la $a0, lineBreak
+	syscall
+	
 	li $v0, 16
     	add $a0, $s0, $zero
     	syscall
 	j mean_outer_loop
 mean_end_outer_loop:
-
-	lw $s0, 0($sp)
+	
+	lw $ra, 28($sp)
+	lwc1 $f21, 24($sp)
+	lwc1 $f20, 20($sp)
+	lw $s5, 16($sp)
+	lw $s6, 12($sp)
+	lw $s2, 8($sp)
 	lw $s1, 4($sp)
-	lw $ra, 8($sp)
-	add $sp, $sp, 12
+	lw $s0, 0($sp)
+	add $sp, $sp, 32
 	jr $ra
 #----------------------------------------------
 #extract int
@@ -115,7 +167,8 @@ mean_end_outer_loop:
 #$v1 = end of file flag
 #----------------------------------------------
 extract_int:	
-	add $sp, $sp, -16
+	add $sp, $sp, -20
+	sw $s3, 16($sp)
 	sw $s2, 12($sp)
 	sw $s1, 8($sp)
 	sw $s0, 4($sp)
@@ -124,7 +177,7 @@ extract_int:
 	move $s0, $a0 #file descriptor
 	move $s2, $a1 #update file pointer flag
 	
-	li $v1, 0
+	li $s3, 0 #end of file flag
 	la $t0, buffer_input
 	la $t3, buffer_int
 	lw $s1, inputFilePointer
@@ -137,7 +190,7 @@ extract_int:
 	syscall
 	addu $s1, $s1, 1
 	beqz $v0, extract_int_end_of_file_flag
-    	
+	
 	lb $t2, ($t0)
     	#get negative signal
 	bne $t2, 45, string_int_copy
@@ -181,40 +234,51 @@ end_string_int_file_descriptor_adjustment:
 
 	j extract_int_exit
 extract_int_end_of_file_flag:
-	li $v1, 1
+	li $s3, 1 #end of file flag
 extract_int_exit:
 	bne $s2, 1, extract_int_exit_2 
 	sw $s1, inputFilePointer
 extract_int_exit_2:
+	move $v1, $s3
 	lw $ra, 0($sp)
 	lw $s0, 4($sp)
 	lw $s1, 8($sp)
 	lw $s2, 12($sp)
-	add $sp, $sp, 16
+	lw $s3, 16($sp)
+	add $sp, $sp, 20
 	jr $ra
 #----------------------------------------------
 #extract float
 #$a0 = input file
+#$a1 = update file pointer flag
 #$f0 = return float
 #$v1 = end of file flag
 #----------------------------------------------
 extract_float:
-	add $sp, $sp, -8
+	add $sp, $sp, -20
+	sw $s3, 16($sp)
+	sw $s2, 12($sp)
+	sw $s1, 8($sp)
 	sw $s0, 4($sp)
 	sw $ra, 0($sp)
 	
 	move $s0, $a0 #file descriptor
+	move $s2, $a1 #update file pointer flag
 	
+	li $s3, 0 #end of file flag
 	la $t0, buffer_input
 	la $t3, buffer_float
-	lw $t4, inputFilePointer
+	lw $s1, inputFilePointer
+	
+	
 	#*to do: remove spaces
 	li $v0, 14
 	add $a0, $s0, $zero
 	la $a1, buffer_input
 	li $a2, 1
 	syscall
-	add $t4, $t4, 1
+	add $s1, $s1, 1
+	beqz $v0, extract_float_end_of_file_flag
 	
 	lb $t2, ($t0)
 	bne $t2, 45, string_float_copy
@@ -234,7 +298,7 @@ string_float_continue:
 	la $a1, buffer_input
 	li $a2, 1
 	syscall
-	add $t4, $t4, 1
+	add $s1, $s1, 1
 	beqz $v0, end_string_float_file_descriptor_adjustment_flag_end
 	
 	j string_float_copy
@@ -247,11 +311,12 @@ end_string_float_copy:
 	la $a1, buffer_input
 	li $a2, 1
 	syscall
-	add $t4, $t4, 1
+	add $s1, $s1, 1
+	beqz $v0, end_string_float_file_descriptor_adjustment_flag_end
 
 	j end_string_float_copy	
 end_string_float_file_descriptor_adjustment_flag_end:
-	li $s0, 1
+	li $s3, 1
 end_string_float_file_descriptor_adjustment:
 	lb $t2, null
 	sb $t2, ($t3)
@@ -259,13 +324,20 @@ end_string_float_file_descriptor_adjustment:
 	la $a0, buffer_float
 	jal string_to_float
 	mov.s $f0, $f0
-	
-	move $v1, $t4
-	seq $a0, $s0, 1
+	j end_string_float_file_exit
+extract_float_end_of_file_flag:
+	li $s3, 1
 end_string_float_file_exit:	
-	lw $ra, 0($sp)
+	bne $s2, 1, end_string_float_file_exit_2
+	sw $s1, inputFilePointer
+end_string_float_file_exit_2:
+	move $v1, $s3
+	lw $s3, 16($sp)
+	lw $s2, 12($sp)
+	lw $s1, 8($sp)
 	lw $s0, 4($sp)
-	add $sp, $sp, 8
+	lw $ra, 0($sp)
+	add $sp, $sp, 20
 	jr $ra
 #----------------------------------------------
 #print on output file
@@ -319,6 +391,7 @@ string2int_end_loop:
 	lw $ra, 0($sp)
 	add $sp, $sp, 4
 	jr $ra
+	jr 
 #----------------------------------------------
 #string_to_float function
 #$a0 = address of string
@@ -423,16 +496,65 @@ fseek_greater_loop:
 	
 	bgt $s1, buffer_input_length, fseek_greater_loop#$a1 > buffer
 end_fseek_greater_loop:
+	addi $s1, $s1, -1
 	li $v0, 14
     	move $a0, $s0
 	la $a1, buffer_input
-	move $a2, $s1
+	#move $a2, $s1
+	li $a2, 1
 	syscall
+	beqz $s1, end_fseek
+	j end_fseek_greater_loop
 end_fseek:
 	lw $s0, 0($sp)
 	lw $s1, 4($sp)
 	add $sp, $sp, 8
 	jr $ra
+	
+#----------------------------------------------
+#addAlread:
+#arguments:
+#$a0 = number
+#$a1 = array address 
+#$a3 = initial array
+#return:
+#$v0 = position on array
+#$v1 = already read (1 - true, 0 - false)
+#----------------------------------------------
+addAlready:
+	li $v1, 1
+	move $v0, $a1
+addAlready_loop:
+	lw $t0, ($a3)
+	beq $a0, $t0, addAlready_exit
+	bge $a3, $a1, addAlready_loop_end_dont
+	addu $a3, $a3, 4
+	j addAlready_loop
+addAlready_loop_end_dont:
+	li $v1, 0
+	sw $a0, ($a1)
+	add $a1, $a1, 4
+	move $v0, $a1
+addAlready_exit:
+	jr $ra
+#----------------------------------------------
+#int2string:
+#arguments:
+#$a0 = int number 
+#return:
+#$v0 = address os string
+#----------------------------------------------
+int2string:
+	la $t0, buffer_int
+	slti $t1, $a0, 0 #negative number verification
+	bnez $t1, int2string_negative_verification_continue
+	mul $a0, $a0, -1
+	li $t2, 45 #- signal
+	sb $t2, ($t0)
+	add $t0, $t0, 
+int2string_negative_verification_continue:
+	
+
 #----------------------------------------------
 #error's labels
 #----------------------------------------------
