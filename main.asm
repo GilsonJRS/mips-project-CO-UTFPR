@@ -93,6 +93,7 @@ re_read:
 	
 	#$f22 have the sum of floats
 	mtc1 $zero, $f22
+	cvt.s.w $f22, $f22
 	add.s $f22, $f22, $f20 
 	
 	#mean counter
@@ -136,7 +137,17 @@ mean_end_inner_loop:
 	#print x($s4) and y($f22)
 	#close file
 	
+	
+	li $v0,1
+	move $a0, $s2
+	syscall
+	
+	li $v0, 4
+	la $a0, comma
+	syscall
+	
 	mov.s $f12, $f22
+	#li $a1, 79
 	jal float2string
 	
 	li $v0, 4
@@ -543,15 +554,17 @@ addAlready_exit:
 #----------------------------------------------
 #int2string:
 #arguments:
-#$a0 = int number 
+#$a1 = int number 
+#$a0 = string address
 #return:
-#$v0 = address os string
+#$v1 = address os string
 #----------------------------------------------
 int2string:
 	add $sp, $sp, -4
 	sw $ra, ($sp)
 	
-	la $t0, buffer_int
+	move $t0, $a0
+	
 	slti $t1, $a0, 0 #negative number verification
 	bne $t1, 1, int2string_negative_verification_continue
 	mul $a0, $a0, -1
@@ -559,7 +572,8 @@ int2string:
 	sb $t2, ($t0)
 	add $t0, $t0,1 
 int2string_negative_verification_continue:
-	move $a1, $a0
+
+	move $a1, $a1
 	move $a0, $t0
 	jal int2string_recursive
 	
@@ -597,7 +611,7 @@ int2string_recursive_continue:
 	sb $zero,($s0) #end of string(\0)
 	
 	move $v0, $s2 #return
-	move $v1, $s0
+	move $v1, $s0 #return string address
 
 	lw $ra, 12($sp)
 	lw $s2, 8($sp)
@@ -660,8 +674,16 @@ float2string_negative_continue:
 	cvt.w.s $f21, $f21
 	mfc1 $s2, $f21	
 	
-	#converting to char
+	#odd problem correction
+	li $t4, 10
+	div $s2, $t4
+	mfhi $t4 
+	bne $t4, 9, odd_correction_continue
+	add $s2, $s2, 1
 	
+odd_correction_continue:
+	
+	#converting to char
 	move $a0, $s0
 	move $a1, $s1
 	jal int2string
