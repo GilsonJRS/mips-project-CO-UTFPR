@@ -1,13 +1,16 @@
 .eqv buffer_input_length 1024
 .data 
-	inputFile: .asciiz "/home/gilson/Documents/mips-project-CO-UTFPR/inputFiles/teste.csv" 
-	outputFile: .asciiz "/home/gilson/Documents/Computer Organization/mips-project-CO-UTFPR/outputFiles/test.csv"
+	pathRequest: .asciiz "path(completly) to the mips-project-CO-UTFPR folder:\n"
+	inputFileNameRequest: .asciiz "name of file: "
+	anotherFileRequest: .asciiz "another file?(y/n): "
+	inputFileFolder: .asciiz "/inputFiles/"
+	outputFileFolder: .asciiz "/outputFiles/"
 	inputFile_error_msg: .asciiz "error on open input file"
 	outputFile_error_msg: .asciiz "error on create output file"
 	invalid_x_input: .asciiz "invalid x value"
 	comma: .asciiz ","
-	lineBreak: .asciiz "\n"
 	null: .asciiz ""
+	lineBreak: .byte 10
     	.word 0
     	buffer_input: .space 1024
     	.word 0
@@ -18,10 +21,60 @@
     	inputFilePointer: .space 4
     	.word 0
     	alreadyRead: .space 500000
-    
+    	.word 0
+    	inputFile: .space 1024
+    	.word 0
+    	outputFile: .space 1024 
+    	.word 0
+    	path: .space 1024
+    	.word 0
+    	fileName: .space 1024
 .text
 main:
-    	jal mean
+	#get the path of folder
+	li $v0, 4
+	la $a0, pathRequest
+	syscall
+	
+	li $v0, 8
+	la $a0, path
+	li $a1, 1024
+	syscall
+	#loop
+	#get name of file 
+	li $v0, 4
+	la $a0, inputFileNameRequest
+	syscall
+	
+	li $v0, 8
+	la $a0, fileName
+	li $a1, 1024
+	syscall
+	#concatenate input folder path with name of input file
+	la $a0, path 
+	la $a1, inputFileFolder
+	la $a2, fileName
+	jal makeInputFilePath
+	
+	#concatenate output folder path with name of file
+	la $a0, path
+	la $a1, outputFileFolder
+	la $a2, fileName
+	jal makeOutputFilePath
+	
+	#mean
+	jal mean
+	    	
+    	li $v0, 4
+    	la $a0, anotherFileRequest
+    	syscall
+    	
+    	li $v0, 12
+    	syscall
+    	
+    	beq $v0, 121, main
+    	#end_loop
+    	j exit
 #----------------------------------------------
 #mean function
 #$a0 = input file
@@ -41,6 +94,13 @@ mean:
 	sw $zero, inputFilePointer #set position on file = 0
 	la $s7, alreadyRead 
 	#add $s1, $a1, $zero #$s1 = output file
+	li $v0, 13
+	la $a0, outputFile
+	li $a1, 1
+	add $a2, $zero, $zero
+	syscall
+	add $s1, $v0, $zero
+	bltz $s1, outputFile_error
 	
 	#this nested loop get one line and go to
 	#the file, if a x equal the actual x is
@@ -137,25 +197,43 @@ mean_end_inner_loop:
 	#print x($s4) and y($f22)
 	#close file
 	
-	
-	li $v0,1
-	move $a0, $s2
+	#converting int to string
+	la $a0, buffer_int
+	move $a1, $s2
+	jal int2string
+	#getting length of string
+	la $a0, buffer_int
+	jal length
+	#writing on file
+	move $a2, $v0
+	li $v0, 15
+	move $a0, $s1
+	la $a1, buffer_int
 	syscall
-	
-	li $v0, 4
-	la $a0, comma
+	bltz $v0, exit
+	#writen comma on file
+	li $v0, 15
+	move $a0, $s1
+	la $a1, comma
+	li $a2, 1
 	syscall
-	
+	#converting float to string
 	mov.s $f12, $f22
-	#li $a1, 79
 	jal float2string
-	
-	li $v0, 4
+	#getting lenght of string	
 	la $a0, buffer_float
+	jal length
+	#writing on file
+	move $a2, $v0
+	li $v0, 15
+	move $a0, $s1
+	la $a1, buffer_float
 	syscall
-	
-	li $v0, 4
-	la $a0, lineBreak
+	#writing line break
+	li $v0, 15
+	move $a0, $s1
+	la $a1, lineBreak
+	li $a2, 1
 	syscall
 	
 	li $v0, 16
@@ -163,6 +241,11 @@ mean_end_inner_loop:
     	syscall
 	j mean_outer_loop
 mean_end_outer_loop:
+	li $v0, 16
+	add $a0, $s0, $zero
+	syscall
+	add $a0, $s1, $zero
+	syscall
 	
 	lw $ra, 28($sp)
 	lwc1 $f21, 24($sp)
@@ -710,6 +793,94 @@ odd_correction_continue:
 	lw $ra, 0($sp)
 	add $sp, $sp, 28
 	jr $ra
+	
+	
+#----------------------------------------------
+#makeInputFilePath:
+#arguments:
+#$a0 = path
+#$a1 = path of input file folder
+#$a2 = file name
+#----------------------------------------------
+makeInputFilePath:
+	la $t1, inputFile
+makeInputFilePath_pathCopy:
+	lb $t0, ($a0)
+	beq $t0, 10, makeInputFilePath_inputFolderCopy
+	sb $t0, ($t1)
+	add $a0, $a0, 1
+	add $t1, $t1, 1
+	j makeInputFilePath_pathCopy 
+makeInputFilePath_inputFolderCopy:
+	lb $t0, ($a1)
+	beqz $t0, makeInputFilePath_fileNameCopy
+	sb $t0, ($t1)
+	add $a1, $a1, 1
+	add $t1, $t1, 1
+	j makeInputFilePath_inputFolderCopy
+makeInputFilePath_fileNameCopy:
+	lb $t0, ($a2)
+	beq $t0, 10, makeInputFilePath_end
+	sb $t0, ($t1)
+	add $a2, $a2, 1
+	add $t1, $t1, 1
+	j makeInputFilePath_fileNameCopy
+makeInputFilePath_end:
+	sb $zero, ($t1)
+	jr $ra
+	
+#----------------------------------------------
+#makeInputFilePath:
+#arguments:
+#$a0 = path
+#$a1 = path of input file folder
+#$a2 = file name
+#----------------------------------------------
+makeOutputFilePath:
+	la $t1, outputFile
+makeOutputFilePath_pathCopy:
+	lb $t0, ($a0)
+	beq $t0, 10, makeOutputFilePath_inputFolderCopy
+	sb $t0, ($t1)
+	add $a0, $a0, 1
+	add $t1, $t1, 1
+	j makeOutputFilePath_pathCopy 
+makeOutputFilePath_inputFolderCopy:
+	lb $t0, ($a1)
+	beqz $t0, makeOutputFilePath_fileNameCopy
+	sb $t0, ($t1)
+	add $a1, $a1, 1
+	add $t1, $t1, 1
+	j makeOutputFilePath_inputFolderCopy
+makeOutputFilePath_fileNameCopy:
+	lb $t0, ($a2)
+	beq $t0, 10, makeOutputFilePath_end
+	sb $t0, ($t1)
+	add $a2, $a2, 1
+	add $t1, $t1, 1
+	j makeOutputFilePath_fileNameCopy
+makeOutputFilePath_end:
+	sb $zero, ($t1)
+	jr $ra
+
+#----------------------------------------------
+#length:
+#arguments:
+#$a0 = address of string
+#return:
+#$v0 = size of string
+#----------------------------------------------
+length:
+	li $v0, 0
+length_loop:
+	lb $t0, ($a0)
+	beqz $t0, length_loop_end
+	add $a0, $a0, 1
+	add $v0, $v0, 1
+	j length_loop 
+length_loop_end:
+	jr $ra
+
 #----------------------------------------------
 #error's labels
 #----------------------------------------------

@@ -3,15 +3,10 @@
 	num: .asciiz "12"
 	null: .asciiz ""
 	buffer_input: .space 1024
-	teste: .float 8.10
-	teste2: .float 9.8
+	teste: .float 9.1
 .text
 .main:
 	l.s $f12, teste
-	la $a0, buffer_input
-	jal float2string
-	
-	l.s $f12, teste2
 	la $a0, buffer_input
 	jal float2string
 	
@@ -50,7 +45,7 @@ float2string_negative_continue:
 	cvt.w.s $f20, $f12
 	mfc1 $s1, $f20 #int part
 	
-	
+	 
 	#geting floor of the float number
 	floor.w.s $f21, $f12
 	cvt.s.w $f21, $f21
@@ -67,6 +62,13 @@ float2string_negative_continue:
 	cvt.w.s $f21, $f21
 	mfc1 $s2, $f21	
 	
+	li $t4, 10
+	div $s2, $t4
+	mfhi $t4 
+	bne $t4, 9, odd_correction_continue
+	add $s2, $s2, 1
+	
+odd_correction_continue:
 	#converting to char
 	
 	move $a0, $s0
