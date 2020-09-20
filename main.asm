@@ -735,8 +735,8 @@ length_loop:
 length_loop_end:
 	jr $ra
 #----------------------------------------------#
-#length:
-#função que calcula o tamanho de uma string
+#write_quotation:
+#função para printar " no arquivo
 #----------------------------------------------#
 #args:
 #$a0 = file descriptor
