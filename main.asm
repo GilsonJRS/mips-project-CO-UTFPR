@@ -1,18 +1,21 @@
+#---------------------------------------------------#
+#Assembly code for CC53B-CC31(Computer Organization)
+#Author: Gilson Junior Soares
+#----------------------------------------------------#
 .eqv buffer_input_length 1024
 .data 
 	inputFile_error_msg: .asciiz "error on open input file"
 	outputFile_error_msg: .asciiz "error on create output file"
 	invalid_x_input: .asciiz "invalid x value"
 	comma: .asciiz ","
+	quote: .byte 34
 	null: .asciiz ""
 	.word 0
 	lineBreak: .byte 10
     	.word 0
     	buffer_input: .space 1024
     	.word 0
-    	buffer_int: .space 100
-    	.word 0
-    	buffer_float: .space 100
+    	buffer: .space 100
     	.word 0
     	position: .space 4
 .text
@@ -23,25 +26,28 @@ main:
 	
 	move $s1, $a0
 	move $s2, $a1
-	li $s3, 0
 main_loop:
 	lw $a0, ($s2)
 	lw $a1, 4($s2)
 	#mean
 	jal mean
 	add $s2, $s2, 8
-	add $s3, $s3, 2
-	bne $s3, $s1, main_loop
+	sub $s1, $s1, 2
+	bnez $s1, main_loop
 	
 	lw $s1, 4($sp)
 	lw $s2, 0($sp)
 	add $sp, $sp, 8
 	j exit
-#----------------------------------------------
+#----------------------------------------------#
 #mean function
+#função que lê do arquivo os dados e realiza a 
+#media
+#----------------------------------------------#
+#args:
 #$a0 = input file
 #$a1 = output file
-#----------------------------------------------
+#----------------------------------------------#
 mean:
 	add $sp, $sp, -32
 	sw $s5, 28($sp)
@@ -104,20 +110,30 @@ extract_numbers_loop:
 	add.s $f20, $f20, $f0 #extracted float
 	j extract_numbers_loop
 extract_number_loop_not_equal:
+	
+	#writing quotation
+	move $a0, $s1
+	jal write_quotation
+	
 	#writing int
-	la $a0, buffer_int
+	la $a0, buffer
 	move $a1, $s2
 	jal int2string
 	
-	la $a0, buffer_int
+	la $a0, buffer
 	jal length
 	
 	move $a2, $v0
 	li $v0, 15
 	move $a0, $s1
-	la $a1, buffer_int
+	la $a1, buffer
 	syscall
 	bltz $v0, exit
+
+	#writing quotation
+	move $a0, $s1
+	jal write_quotation
+
 	
 	#write comma on file
 	li $v0, 15
@@ -126,6 +142,10 @@ extract_number_loop_not_equal:
 	li $a2, 1
 	syscall
 	
+	#writing quotation
+	move $a0, $s1
+	jal write_quotation
+
 	#write float on file
 	mov.s $f12, $f20
 	#lw $t0, 8($s3)
@@ -135,14 +155,18 @@ extract_number_loop_not_equal:
 	
 	jal float2string
 	
-	la $a0, buffer_float
+	la $a0, buffer
 	jal length
 	
 	move $a2, $v0
 	li $v0, 15
 	move $a0, $s1
-	la $a1, buffer_float
+	la $a1, buffer
 	syscall
+	
+	#writing quotation
+	move $a0, $s1
+	jal write_quotation
 	
 	#writing line break
 	li $v0,15
@@ -183,12 +207,16 @@ extract_numbers_end_loop:
 	lw $s0, 0($sp)
 	add $sp, $sp, 32
 	jr $ra
-#----------------------------------------------
+#----------------------------------------------#
 #extract int
+#função que extrai um numero inteiro do arquivo
+#----------------------------------------------#
+#args:
 #$a0 = input file
+#returns:
 #$v0 = int extracted
 #$v1 = end of file flag
-#----------------------------------------------
+#----------------------------------------------#
 extract_int:	
 	add $sp, $sp, -20
 	sw $s3, 16($sp)
@@ -201,7 +229,7 @@ extract_int:
 	
 	li $s3, 0 #end of file flag
 	la $t0, buffer_input
-	la $t3, buffer_int
+	la $t3, buffer
 	
 extract_int_quotation:
 
@@ -260,7 +288,7 @@ end_string_int_file_descriptor_adjustment:
 	lb $t2, null #load null terminator
 	sb $t2, ($t3) #stores null to flag buffer_int end
 	
-	la $a0, buffer_int
+	la $a0, buffer
 	jal string_to_int
 	move $v0, $v0 #return int
 
@@ -281,12 +309,16 @@ extract_int_exit:
 	lw $s3, 16($sp)
 	add $sp, $sp, 20
 	jr $ra
-#----------------------------------------------
+#----------------------------------------------#
 #extract float
+#função que extrai um float do arquivo
+#----------------------------------------------#
+#args:
 #$a0 = input file
+#returns:
 #$f0 = return float
 #$v1 = end of file flag
-#----------------------------------------------
+#----------------------------------------------#
 extract_float:
 
 	add $sp, $sp, -20
@@ -300,7 +332,7 @@ extract_float:
 	
 	li $s3, 0 #end of file flag
 	la $t0, buffer_input
-	la $t3, buffer_float
+	la $t3, buffer
 	
 extract_float_quotation:
 	#*to do: remove spaces
@@ -364,7 +396,7 @@ end_string_float_file_descriptor_adjustment:
 	lb $t2, null
 	sb $t2, ($t3)
 	
-	la $a0, buffer_float
+	la $a0, buffer
 	jal string_to_float
 	mov.s $f0, $f0
 	j end_string_float_file_exit
@@ -385,11 +417,15 @@ end_string_float_file_exit:
 	add $sp, $sp, 20
 	jr $ra
 
-#----------------------------------------------
-#string_to_int function
+#----------------------------------------------#
+#string_to_int
+#função que converte uma string para inteiro
+#----------------------------------------------#
+#args:
 #$a0 = address of string
+#returns:
 #$v0 = integer 
-#----------------------------------------------
+#----------------------------------------------#
 string_to_int:
 	add $sp, $sp, -4
 	sw $ra, 0($sp)
@@ -431,11 +467,15 @@ string2int_end_loop:
 	lw $ra, 0($sp)
 	add $sp, $sp, 4
 	jr $ra
-#----------------------------------------------
+#----------------------------------------------#
 #string_to_float function
+#função que converter string para float
+#----------------------------------------------#
+#args:
 #$a0 = address of string
+#returns:
 #$f0 = float 
-#----------------------------------------------
+#----------------------------------------------#
 string_to_float:
 	add $sp, $sp, -4
 	sw $ra, 0($sp)
@@ -507,14 +547,16 @@ str2float_negative_flag_else:
 	lw $ra, 0($sp)
 	add $sp, $sp, 4
 	jr $ra
-#----------------------------------------------
+#----------------------------------------------#
 #int2string:
+#função para converter int para string
+#----------------------------------------------#
 #arguments:
 #$a1 = int number 
 #$a0 = string address
-#return:
-#$v1 = address os string
-#----------------------------------------------
+#returns:
+#$v1 = address of string
+#----------------------------------------------#
 int2string:
 	add $sp, $sp, -4
 	sw $ra, ($sp)
@@ -575,13 +617,15 @@ int2string_recursive_continue:
 	lw $s0, 0($sp)
 	addi $sp, $sp, 16
 	jr $ra
-#----------------------------------------------
-#float2string:
+#----------------------------------------------#
+#float2string
+#função que converte de float para string
+#----------------------------------------------#
 #arguments:
 #$f12 = float number 
 #return:
-#$v0 = address os string
-#----------------------------------------------
+#$v0 = address of string
+#----------------------------------------------#
 float2string:
 	#f12 = float
 	#$a0 = string
@@ -594,7 +638,7 @@ float2string:
 	sw $s0, 4($sp)
 	sw $ra, 0($sp)
 	
-	la $s0, buffer_float
+	la $s0, buffer
 	#negative numbers exception
 	mtc1 $zero, $f16
 	cvt.s.w $f16, $f16
@@ -648,12 +692,19 @@ odd_correction_continue:
 	sb $t0, ($s0)
 	add $s0, $s0, 1
 	
+	bgt $s2, 9, nine_correction
+	li $t0, '0'
+	sb $t0, ($s0)
+	add $s0, $s0, 1
+	
+nine_correction:
+	
 	move $a0, $s0
 	move $a1, $s2
 	jal int2string
 	move $s0, $v1
 	
-	la $v0, buffer_float
+	la $v0, buffer
 	
 	lwc1 $f22, 24($sp)
 	lwc1 $f21, 20($sp)
@@ -664,13 +715,15 @@ odd_correction_continue:
 	lw $ra, 0($sp)
 	add $sp, $sp, 28
 	jr $ra
-#----------------------------------------------
+#----------------------------------------------#
 #length:
-#arguments:
+#função que calcula o tamanho de uma string
+#----------------------------------------------#
+#args:
 #$a0 = address of string
-#return:
+#returns:
 #$v0 = size of string
-#----------------------------------------------
+#----------------------------------------------#
 length:
 	li $v0, 0
 length_loop:
@@ -681,9 +734,24 @@ length_loop:
 	j length_loop 
 length_loop_end:
 	jr $ra
-#----------------------------------------------
+#----------------------------------------------#
+#length:
+#função que calcula o tamanho de uma string
+#----------------------------------------------#
+#args:
+#$a0 = file descriptor
+#returns:
+#----------------------------------------------#
+write_quotation:
+	li $v0, 15
+	la $a1, quote
+	li $a2, 1
+	syscall
+	
+	jr $ra
+#----------------------------------------------#
 #error's labels
-#----------------------------------------------
+#----------------------------------------------#
 inputFile_error:
 	li $v0, 4
 	la $a0, inputFile_error_msg
@@ -694,7 +762,9 @@ outputFile_error:
 	la $a0, outputFile_error_msg
 	syscall
 	j exit
-#exit	
+#----------------------------------------------#
+#exit label	
+#----------------------------------------------#
 exit:
     li $v0, 10
     syscall

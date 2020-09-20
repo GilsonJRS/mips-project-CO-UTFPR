@@ -1,38 +1,22 @@
 #!/bin/bash
-echo "Path to Mars.jar"
-read marsPath
-if test -f "$marsPath";then
+file_names=()
+args=()
+for f in inputFiles/*.csv 
+do  
+    base=$(basename -- $f) 
+    file_names+=($base)
+    input_files=($(pwd)"/"$f)
+    output_files=($(pwd)"/outputFiles/output_"$base)
+    args+=("$input_files" "$output_files")
+done
+echo "Sorting files ..."
+python3 order.py ${file_names[@]} 
 
-    file_names=()
-    input_files=()
-    output_files=()
-    args=()
-    for f in ./inputFiles/*.csv 
-    do 
-        base=$(basename -- $f) 
-        file_names+=($base)
-    done
-
-    echo "Sorting files ..."
-    python3 order.py ${file_names[@]} 
+echo "Processing files ..."
+ 
+java -jar Mars45.jar nc main.asm pa ${args[@]}
     
-    echo "Processing files ..."
+echo "Ploting graphics..."
+python3 scriptPlot.py
     
-    for f in ${file_names[@]}
-    do
-        input_files+=($(pwd)"/inputFiles/"$f)
-        output_files+=($(pwd)"/outputFiles/output_"$f)
-    done
-    
-    for((i=0;i<${#input_files[*]};i++));do
-        args+=("${input_files[$i]}" "${output_files[$i]}")
-    done
-    java -jar $marsPath nc main.asm pa ${args[@]}
-    
-    echo "Ploting graphics..."
-    python3 scriptPlot.py
-    
-    echo "Done"
-else
-    echo -e "Mars jars does not exist in this location"
-fi
+echo "Done"
